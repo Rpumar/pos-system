@@ -1,0 +1,23 @@
+# Dependencias
+node_modules/
+
+# Builds
+dist/
+dist-electron/
+*.tsbuildinfo
+
+# Bases de datos y datos locales
+data/
+database/
+*.db
+*.db-journal
+*.db-wal
+*.db-shm
+
+# Secretos y entornos
+.env
+.env.local
+.env.production
+
+# Logs y temporales
+*.log

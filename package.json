@@ -1,0 +1,135 @@
+{
+  "name": "pos-system",
+  "version": "0.1.0",
+  "description": "Sistema POS de alta velocidad para caja de supermercado",
+  "author": "POS System",
+  "type": "commonjs",
+  "main": "dist-electron/main.js",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc && vite build",
+    "build:electron": "npm run build && tsc -p tsconfig.electron.json",
+    "electron:dev": "concurrently \"npm run dev\" \"wait-on http://localhost:5173 && electron .\"",
+    "electron:build": "npm run build:electron && electron-builder",
+    "electron:build:win": "npm run build:electron && electron-builder --win",
+    "electron:build:linux": "npm run build:electron && electron-builder --linux",
+    "test:concurrency": "node scripts/concurrency-test/run-concurrency-test.cjs",
+    "test:fefo": "node scripts/fefo-test/run-fefo-test.cjs",
+    "test:scanner": "npx tsx scripts/scanner-test/run-scanner-test.ts",
+    "test:cart": "npx tsx scripts/cart-usecase-test/run-cart-usecase-test.ts",
+    "test:payment": "npx tsx scripts/payment-test/run-payment-test.ts",
+    "test:auth": "npx tsx scripts/auth-test/run-auth-test.ts",
+    "test:cash": "npx tsx scripts/cash-movement-test/run-cash-movement-test.ts",
+    "test:arqueo": "npx tsx scripts/arqueo-test/run-arqueo-test.ts",
+    "test:all": "npm run test:concurrency && npm run test:fefo && npm run test:scanner && npm run test:cart && npm run test:payment && npm run test:auth && npm run test:cash && npm run test:arqueo"
+  },
+  "dependencies": {
+    "electron-updater": "^6.1.7"
+  },
+  "devDependencies": {
+    "@types/better-sqlite3": "^7.6.11",
+    "@types/node": "^22.7.4",
+    "@types/node-hid": "^1.3.4",
+    "@types/react": "^18.3.1",
+    "@types/react-dom": "^18.3.1",
+    "@vitejs/plugin-react": "^4.3.1",
+    "better-sqlite3": "^11.3.0",
+    "concurrently": "^8.2.2",
+    "electron": "^29.1.0",
+    "electron-builder": "^24.13.3",
+    "icojs": "^1.0.0",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "serialport": "^12.0.0",
+    "sharp": "^0.35.3",
+    "tsx": "^4.19.1",
+    "typescript": "^5.6.2",
+    "vite": "^5.4.8",
+    "vitest": "^2.1.1",
+    "wait-on": "^7.2.0"
+  },
+  "build": {
+    "appId": "com.pos-system.supermarket",
+    "productName": "POS System",
+    "copyright": "Copyright © 2024 POS System",
+    "directories": {
+      "output": "dist-electron",
+      "buildResources": "build-resources"
+    },
+    "files": [
+      "dist/**/*",
+      "dist-electron/main.js",
+      "dist-electron/main.js.map",
+      "dist-electron/preload.js",
+      "dist-electron/preload.js.map",
+      "build-resources/icon.png",
+      "package.json"
+    ],
+    "extraResources": [
+      {
+        "from": "server",
+        "to": "server",
+        "filter": [
+          "dist/**/*",
+          "node_modules/**/*",
+          "package.json"
+        ]
+      }
+    ],
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        },
+        {
+          "target": "msi",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "icon": "build-resources/icon.png",
+      "sign": null,
+      "signAndEditExecutable": false
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "POS System",
+      "installerIcon": "build-resources/icon.ico",
+      "uninstallerIcon": "build-resources/icon.ico",
+      "installerHeaderIcon": "build-resources/icon.ico"
+    },
+    "msi": {
+      "oneClick": false,
+      "perMachine": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "POS System",
+      "upgradeCode": "12345678-1234-1234-1234-123456789012"
+    },
+    "linux": {
+      "target": [
+        {
+          "target": "AppImage",
+          "arch": [
+            "x64"
+          ]
+        },
+        {
+          "target": "deb",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "icon": "build-resources/icon.png",
+      "category": "Office"
+    }
+  }
+}
