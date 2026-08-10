@@ -30,7 +30,7 @@ interface CashLedger {
   withdrawals: number;
 }
 
-function getCashLedger(turnoId: string): CashLedger {
+export function getCashLedger(turnoId: string): CashLedger {
   const movs = db.prepare(`
     SELECT tipo, monto FROM movimientos_caja
     WHERE turno_id = ? AND tipo IN ('VENTA_EFECTIVO', 'DEVOLUCION', 'DEPOSITO', 'RETIRO')
@@ -46,14 +46,14 @@ function getCashLedger(turnoId: string): CashLedger {
   return ledger;
 }
 
-function expectedCash(turno: { monto_apertura: number }, ledger: CashLedger): number {
+export function expectedCash(turno: { monto_apertura: number }, ledger: CashLedger): number {
   return turno.monto_apertura + ledger.sales + ledger.refunds + ledger.deposits - ledger.withdrawals;
 }
 
 // Los retiros sacan dinero físico del cajón: exigen autorización de supervisor,
 // registrada en `autorizado_por`. Se valida la identidad y el rol aquí mismo
 // (defensa en profundidad — el flujo de UI ya pide PIN).
-function isAuthorizedSupervisor(autorizadoPor: unknown): boolean {
+export function isAuthorizedSupervisor(autorizadoPor: unknown): boolean {
   if (typeof autorizadoPor !== 'string' || !autorizadoPor) return false;
   const u = db.prepare('SELECT role FROM usuarios WHERE id = ? AND activa = 1').get(autorizadoPor) as { role: string } | undefined;
   return !!u && ['SUPERVISOR', 'ADMIN', 'MANAGER'].includes(u.role);

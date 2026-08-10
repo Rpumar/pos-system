@@ -1,8 +1,36 @@
 import jwt from 'jsonwebtoken';
 import { Request, Response, NextFunction } from 'express';
 import { getDB } from '../db/index.js';
+import { randomBytes } from 'crypto';
+import { readFileSync, writeFileSync, existsSync, mkdirSync } from 'fs';
+import { join, dirname } from 'path';
 
-const JWT_SECRET = process.env.JWT_SECRET ?? 'pos-super-secret-change-in-production';
+// El secreto JWT NUNCA debe ser el default conocido. En producción se toma de
+// JWT_SECRET; si no está seteado, se genera uno aleatorio y se persiste junto
+// a la base (para que las sesiones sobrevivan reinicios del server).
+function loadJwtSecret(secretPath: string): string {
+  try {
+    return readFileSync(secretPath, 'utf8').trim();
+  } catch {
+    const secret = randomBytes(32).toString('hex');
+    try {
+      mkdirSync(dirname(secretPath), { recursive: true });
+      writeFileSync(secretPath, secret, { mode: 0o600 });
+    } catch {
+      /* si no puede persistir, se cae a secreto efímero */
+    }
+    return secret;
+  }
+}
+
+function loadJwtSecretFromEnvOrFile(): string {
+  const env = process.env.JWT_SECRET;
+  if (env && env.trim()) return env.trim();
+  const dbPath = process.env.POS_SERVER_DB_PATH ?? join(process.cwd(), 'data', 'pos-server.db');
+  return loadJwtSecret(`${dbPath}.jwt-secret`);
+}
+
+const JWT_SECRET = loadJwtSecretFromEnvOrFile();
 const JWT_EXPIRES = Number(process.env.JWT_EXPIRES || 28800); // 8 hours in seconds
 
 export interface JWTPayload {

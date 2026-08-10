@@ -128,6 +128,19 @@ async function main(): Promise<void> {
   const { default: dashboardRouter } = require('./routes/dashboard.js') as { default: import('express').Router };
   const auth = require('./middleware/auth.js') as typeof import('./middleware/auth.js');
 
+  // Throttle de login server-side (in-memory; por IP+email).
+  const LOGIN_MAX_ATTEMPTS = Number(process.env.LOGIN_MAX_ATTEMPTS || 5);
+  const LOGIN_LOCKOUT_MS = Number(process.env.LOGIN_LOCKOUT_MS || 5 * 60_000);
+  const loginAttempts = new Map<string, { count: number; lockedUntil: number }>();
+
+  function pruneloginAttempts(): void {
+    if (loginAttempts.size < 5000) return;
+    const now = Date.now();
+    for (const [k, v] of loginAttempts) {
+      if (v.count === 0 || (v.lockedUntil && v.lockedUntil < now)) loginAttempts.delete(k);
+    }
+  }
+
   // Auth routes
   app.post('/api/auth/login', async (req, res) => {
     try {
@@ -137,14 +150,30 @@ async function main(): Promise<void> {
         return;
       }
 
+      // Throttle server-side por IP+email: el lockout del cliente es solo UI,
+      // esto protege la API directamente (fuerza bruta de PIN de 4 dígitos).
+      const key = `${req.ip ?? ''}|${String(email).toLowerCase().trim()}`;
+      const rec = loginAttempts.get(key);
+      if (rec && rec.lockedUntil && Date.now() < rec.lockedUntil) {
+        res.setHeader('Retry-After', String(Math.ceil((rec.lockedUntil - Date.now()) / 1000)));
+        res.status(429).json({ error: 'Demasiados intentos fallidos. Intente nuevamente más tarde' });
+        return;
+      }
+
       const bcrypt = await import('bcryptjs');
       const db = getDB();
       const user = db.prepare('SELECT * FROM usuarios WHERE email = ? AND activa = 1').get(email);
 
       if (!user || !bcrypt.default.compareSync(pin, user.pin_hash)) {
+        const count = (rec?.count ?? 0) + 1;
+        const lockedUntil = count >= LOGIN_MAX_ATTEMPTS ? Date.now() + LOGIN_LOCKOUT_MS : undefined;
+        loginAttempts.set(key, { count, lockedUntil: lockedUntil ?? 0 });
+        pruneloginAttempts();
         res.status(401).json({ error: 'Credenciales inválidas' });
         return;
       }
+
+      loginAttempts.delete(key);
 
       const token = auth.generateToken({
         userId: user.id,
