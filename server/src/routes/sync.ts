@@ -291,7 +291,14 @@ async function crearMovimientoCajaServer(payload: any, user: any): Promise<void>
   if (!TIPOS_MOVIMIENTO_CAJA.includes(tipo)) throw new Error(`Tipo de movimiento de caja no permitido: ${tipo}`);
 
   if (typeof monto !== 'number' || !Number.isFinite(monto)) throw new Error('Monto inválido');
-  if (tipo !== 'DEVOLUCION' && monto <= 0) throw new Error('El monto debe ser mayor a cero');
+  // DEVOLUCION es dinero que SALE del cajón hacia el cliente: estrictamente
+  // negativo. Dejar pasar una DEVOLUCION positiva inflaría el esperado del
+  // arqueo y permitiría cuadrar retirando efectivo.
+  if (tipo === 'DEVOLUCION') {
+    if (monto >= 0) throw new Error('Una devolución debe ser un monto negativo');
+  } else if (monto <= 0) {
+    throw new Error('El monto debe ser mayor a cero');
+  }
 
   const turno = turnoAbierto(turno_id);
 

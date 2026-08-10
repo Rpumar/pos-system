@@ -165,9 +165,12 @@ async function main(): Promise<void> {
       const user = db.prepare('SELECT * FROM usuarios WHERE email = ? AND activa = 1').get(email);
 
       if (!user || !bcrypt.default.compareSync(pin, user.pin_hash)) {
-        const count = (rec?.count ?? 0) + 1;
-        const lockedUntil = count >= LOGIN_MAX_ATTEMPTS ? Date.now() + LOGIN_LOCKOUT_MS : undefined;
-        loginAttempts.set(key, { count, lockedUntil: lockedUntil ?? 0 });
+        // Si el lockout previo ya venció, el conteo arranca de nuevo: un solo
+        // error tras la ventana no debe re-bloquear con count perpetuado.
+        const lockExpirado = !!rec?.lockedUntil && rec.lockedUntil !== 0 && Date.now() >= rec.lockedUntil;
+        const count = lockExpirado ? 1 : (rec?.count ?? 0) + 1;
+        const lockedUntil = count >= LOGIN_MAX_ATTEMPTS ? Date.now() + LOGIN_LOCKOUT_MS : 0;
+        loginAttempts.set(key, { count, lockedUntil });
         pruneloginAttempts();
         res.status(401).json({ error: 'Credenciales inválidas' });
         return;
