@@ -67,10 +67,14 @@ export class OutboxManager {
   }
 
   /**
-   * Obtiene operaciones pendientes
+   * Obtiene operaciones pendientes en orden FIFO. El id del outbox es
+   * `${type}-${timestamp}-${random}`: ordenar por clave (string) pondría
+   * CLOSE_SHIFT antes que CREATE_SALE (porque 'L' < 'R'), cerrando el turno
+   * en el server antes de llegar la venta. El server exige el orden real.
    */
   async getPending(): Promise<OutboxOperation[]> {
-    return this.db.getPendingSync('outbox', this.config.batchSize);
+    const pending = await this.db.getPendingSync('outbox', this.config.batchSize);
+    return pending.sort((a: OutboxOperation, b: OutboxOperation) => a.createdAt - b.createdAt);
   }
 
   /**

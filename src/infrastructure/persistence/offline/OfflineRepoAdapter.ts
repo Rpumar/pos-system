@@ -499,7 +499,8 @@ export class OfflineUnitOfWork implements IUnitOfWork {
     const rows = await this.deps.db.getByIndex<DTO>('stock_sucursal', 'producto_id', productId);
     for (const row of rows) {
       const nuevo = Math.max(0, Number(row['cantidad'] ?? 0) + delta);
-      await this.deps.db.put('stock_sucursal', { ...row, cantidad: nuevo } as never);
+      const id = String(row['id'] ?? `${String(row['producto_id'])}:${String(row['sucursal_id'] ?? '')}`);
+      await this.deps.db.put('stock_sucursal', { ...row, id, cantidad: nuevo } as never);
     }
   }
 }

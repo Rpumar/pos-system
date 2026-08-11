@@ -306,9 +306,12 @@ export class SyncManager {
         else result.synced++;
       }
 
-      // Procesar stock
+      // Procesar stock: el server usa PK (producto_id, sucursal_id) sin `id`.
+      // El store offline exige `id` como keyPath -> sintetizarlo o el put
+      // lanza DataError y el pull no guarda nada de stock.
       for (const stock of data.stock) {
-        await this.db.put('stock_sucursal', { ...stock, syncedAt: Date.now() });
+        const id = String(stock.id ?? `${String(stock.producto_id)}:${String(stock.sucursal_id)}`);
+        await this.db.put('stock_sucursal', { ...stock, id, syncedAt: Date.now() });
         result.synced++;
       }
 
@@ -339,12 +342,17 @@ export class SyncManager {
     const localRecord = await this.db.get<{ id: string; updatedAt?: number }>(entity, serverRecord.id);
 
     if (!localRecord) {
-      await this.db.put(entity, { ...serverRecord, syncedAt: Date.now() });
+      const freshTs = serverRecord.updated_at ? (new Date(serverRecord.updated_at).getTime() || 0) : 0;
+      await this.db.put(entity, { ...serverRecord, updatedAt: freshTs, syncedAt: Date.now() });
       return false;
     }
 
     const localUpdated = localRecord.updatedAt || 0;
-    const serverUpdated = serverRecord.updatedAt || 0;
+    // El server manda `updated_at` (ISO); el registro local guarda ms en
+    // `updatedAt`. Normalizar a ms para comparar correctamente, o el catálogo
+    // nunca se refresca (updatedAt nunca cambia en las filas del server).
+    const serverRaw = serverRecord.updated_at ?? serverRecord.updatedAt;
+    const serverUpdated = serverRaw ? (new Date(serverRaw).getTime() || 0) : 0;
     const lastSync = await this.getLastSyncTimestamp();
 
     if (localUpdated > lastSync && serverUpdated > lastSync) {
@@ -352,7 +360,7 @@ export class SyncManager {
     }
 
     if (serverUpdated > localUpdated) {
-      await this.db.put(entity, { ...serverRecord, syncedAt: Date.now() });
+      await this.db.put(entity, { ...serverRecord, updatedAt: serverUpdated, syncedAt: Date.now() });
     }
 
     return false;
