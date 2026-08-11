@@ -1,0 +1,46 @@
+name: CI
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+
+jobs:
+  test:
+    name: Test + typecheck
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: |
+            package-lock.json
+            server/package-lock.json
+
+      # Mejor-sqlite3 trae prebuilds para linux-x64; si faltaran, el runner tiene toolchain para compilar
+      - name: Instalar dependencias raíz
+        run: npm ci
+
+      - name: Instalar dependencias del server
+        working-directory: server
+        run: npm ci
+
+      - name: Buildear el server (los tests offline/concurrency spawnan server/dist/index.js)
+        working-directory: server
+        run: npm run build
+
+      - name: Typecheck + build del cliente
+        run: npm run build
+
+      - name: Typecheck cliente (sin emit)
+        run: npx tsc --noEmit -p tsconfig.json
+
+      - name: Suite completa de tests
+        run: npm run test:all
+
+      - name: Typecheck electron main/preload
+        run: npx tsc --noEmit -p tsconfig.electron.json
