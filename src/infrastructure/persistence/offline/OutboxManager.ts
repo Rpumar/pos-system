@@ -74,7 +74,11 @@ export class OutboxManager {
    */
   async getPending(): Promise<OutboxOperation[]> {
     const pending = await this.db.getPendingSync('outbox', this.config.batchSize);
-    return pending.sort((a: OutboxOperation, b: OutboxOperation) => a.createdAt - b.createdAt);
+    // Las ops agotaron reintentos (status 'failed') no se vuelven a intentar en
+    // cada sync: quedan como registro para auditoría local.
+    return pending
+      .filter((o: OutboxOperation) => o.status !== 'failed')
+      .sort((a: OutboxOperation, b: OutboxOperation) => a.createdAt - b.createdAt);
   }
 
   /**
@@ -192,4 +196,16 @@ export class OutboxManager {
     }
     return deleted;
   }
+
+  /**
+   * Evicta completadas antiguas como parte del ciclo de sync. Se throttlea a
+   * (min 1/hora) para no hacer un getAll del outbox en cada tick de 30s.
+   */
+  async cleanupThrottled(now = Date.now()): Promise<number> {
+    if (now - (this.lastCleanup ?? 0) < 60 * 60 * 1000) return 0;
+    this.lastCleanup = now;
+    return this.cleanup();
+  }
+
+  private lastCleanup: number | undefined;
 }

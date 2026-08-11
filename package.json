@@ -1,6 +1,6 @@
 {
   "name": "pos-system",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Sistema POS de alta velocidad para caja de supermercado",
   "author": "POS System",
   "type": "commonjs",

@@ -216,6 +216,10 @@ export class SyncManager {
       result.conflicts += pullResult.conflicts;
       result.errors.push(...pullResult.errors);
 
+      // 3. Evictar completadas antiguas del outbox (1/hora, no cada tick)
+      const evicted = await this.outbox.cleanupThrottled();
+      if (evicted > 0) console.log(`[Sync] outbox: ${evicted} operaciones completadas eliminadas`);
+
       this.emit('sync:completed', result);
     } catch (error) {
       result.errors.push(error instanceof Error ? error.message : 'Error de sincronización');

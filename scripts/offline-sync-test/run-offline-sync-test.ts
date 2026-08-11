@@ -182,6 +182,35 @@ const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
     check('offline: pull devuelve catalogo/stock/usuarios',
       Array.isArray(pull.productos) && Array.isArray(pull.stock) && Array.isArray(pull.usuarios) && pull.productos.length > 0,
       `productos=${pull.productos?.length} stock=${pull.stock?.length} usuarios=${pull.usuarios?.length}`);
+
+    // ── Eviction y reintentos del outbox ──
+    const rejOp = pendientes[0];
+    // La op que agotó reintentos queda 'failed' y NO se vuelve a reintentar
+    for (let i = 0; i < 6; i++) {
+      await sync.sync();
+    }
+    const rejFinal = await db.get('outbox', rejOp.id);
+    const pendientes2 = await outbox.getPending();
+    check('outbox: op rechazada agota reintentos y no se reintenta en cada sync',
+      rejFinal?.status === 'failed' && !pendientes2.some((o) => o.id === rejOp.id),
+      `status=${rejFinal?.status} retries=${rejFinal?.retries} pendientes2=${pendientes2.length}`);
+
+    // Eviction: cleanup borra completadas viejas (>7 días). Se usa una op nueva
+    // con id distinto (si reutilizáramos rejOp, el put la volvería 'completed'
+    // y el estado 'failed' del punto anterior quedaría pisado).
+    const opViejaId = 'vieja-' + Date.now();
+    await db.put('outbox', { id: opViejaId, type: 'CREATE_SALE', payload: {}, createdAt: Date.now() - 10 * 24 * 60 * 60 * 1000, retries: 0, status: 'completed', syncedAt: Date.now() - 8 * 24 * 60 * 60 * 1000, updatedAt: Date.now() - 8 * 24 * 60 * 60 * 1000 });
+    const evicted = await outbox.cleanup();
+    check('outbox: cleanup borra completadas viejas (>7d) y respeta el resto',
+      evicted === 1 && !(await db.get('outbox', opViejaId)) && (await outbox.getPending()).length === 0,
+      `evicted=${evicted} viejaBorrada=${!(await db.get('outbox', opViejaId))}`);
+
+    // Throttle: la 2da llamada dentro de la misma hora no vuelve a barrer
+    const ev1 = await outbox.cleanupThrottled(); // primer barrido en esta instancia
+    const ev2 = await outbox.cleanupThrottled(); // throttled: 0
+    check('outbox: cleanupThrottled barre 1/hora (2da llamada no ejecuta)',
+      ev2 === 0,
+      `ev1=${ev1} ev2=${ev2}`);
   } catch (e) {
     console.log('EXCEPCION: ' + (e instanceof Error ? e.message : String(e)));
     fails++;
