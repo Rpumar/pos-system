@@ -34,7 +34,8 @@ const stubAudit: IAuditLogRepository = {
 export class ServerAuthenticateUseCase extends AuthenticateCashierUseCase {
   constructor(
     private readonly api: ApiClient,
-    private readonly ctx: ServerSessionContext
+    private readonly ctx: ServerSessionContext,
+    private readonly onAuthenticated?: (token: string, user: User) => void
   ) {
     super(stubUserRepo, stubHasher, stubAudit);
   }
@@ -55,6 +56,7 @@ export class ServerAuthenticateUseCase extends AuthenticateCashierUseCase {
     const userDto = (res['user'] ?? {}) as DTO;
     const user = mapUser(userDto);
     this.ctx.setAuth(user.id, String(userDto['sucursal_id'] ?? '') || null);
+    this.onAuthenticated?.(String(res['token'] ?? ''), user);
     return user;
   }
 }

@@ -172,6 +172,9 @@ export function App({ container }: AppProps) {
         onReports={handleOpenReports}
         onCashMovement={handleCashMovement}
         eventBus={container.eventBus}
+        networkDetector={container.offline.networkDetector ?? undefined}
+        outboxManager={container.offline.outboxManager ?? undefined}
+        syncManager={container.offline.syncManager ?? undefined}
       />
       {toast && (
         <div

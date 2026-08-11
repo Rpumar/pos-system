@@ -160,20 +160,14 @@ export class OfflineDB {
     });
   }
 
-  // Obtener registros pendientes de sincronización
+  // Obtener registros pendientes de sincronización.
+  // NO depende de un índice 'syncedAt' (el store outbox no lo tiene): filtra
+  // por getAll, correcto para el volumen reducido del outbox local.
   async getPendingSync(storeName: string, limit = 100): Promise<SyncableRecord[]> {
-    const store = await this.getStore(storeName, 'readonly');
-    const index = store.index('syncedAt');
-    return new Promise((resolve, reject) => {
-      // syncedAt = undefined o 0 = pendiente
-      const range = IDBKeyRange.upperBound(0);
-      const request = index.getAll(range);
-      request.onsuccess = () => {
-        const results = request.result.slice(0, limit);
-        resolve(results);
-      };
-      request.onerror = () => reject(request.error);
-    });
+    const all = await this.getAll<SyncableRecord>(storeName);
+    return all
+      .filter((r) => r.syncedAt === undefined || r.syncedAt <= 0)
+      .slice(0, limit);
   }
 
   // Marcar como sincronizado
@@ -241,11 +235,37 @@ export function createPOSOfflineDB(): OfflineDB {
         ],
       },
       {
-        name: 'products',
+        name: 'productos',
         keyPath: 'id',
         indexes: [
-          { name: 'sku', keyPath: 'sku', unique: true },
-          { name: 'barcode', keyPath: 'barcode', unique: true },
+          // Catálogo maestro traído por SyncManager.pullChanges (DTO del server)
+          { name: 'syncedAt', keyPath: 'syncedAt' },
+          // No-únicos a propósito: el server puede traer duplicados/nulos y un
+          // índice unique lanzaría ConstraintError en el pull (perdiendo catálogo).
+          { name: 'sku', keyPath: 'sku' },
+          { name: 'barcode', keyPath: 'barcode' },
+        ],
+      },
+      {
+        name: 'stock_sucursal',
+        keyPath: 'id',
+        indexes: [
+          { name: 'syncedAt', keyPath: 'syncedAt' },
+          { name: 'producto_id', keyPath: 'producto_id' },
+        ],
+      },
+      {
+        name: 'lotes',
+        keyPath: 'id',
+        indexes: [
+          { name: 'syncedAt', keyPath: 'syncedAt' },
+          { name: 'producto_id', keyPath: 'producto_id' },
+        ],
+      },
+      {
+        name: 'usuarios',
+        keyPath: 'id',
+        indexes: [
           { name: 'syncedAt', keyPath: 'syncedAt' },
         ],
       },

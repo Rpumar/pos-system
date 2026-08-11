@@ -69,6 +69,21 @@ export class SyncManager {
   }
 
   /**
+   * Vincula el token de sesión una vez el usuario se autentica (login HTTP).
+   * Sin él, push/pull fallan con 401 y las operaciones quedan pendientes.
+   */
+  setAuth(token: string): void {
+    this.config.authToken = token;
+  }
+
+  /**
+   * Vincula el id de caja una vez resuelto el registro (apertura de turno).
+   */
+  setCaja(cajaId: string): void {
+    if (cajaId) this.config.cajaId = cajaId;
+  }
+
+  /**
    * Inicializa conexión WebSocket
    */
   async initWebSocket(): Promise<void> {
@@ -177,6 +192,10 @@ export class SyncManager {
   async sync(): Promise<SyncResult> {
     if (this.syncing) return { synced: 0, failed: 0, conflicts: 0, errors: ['Ya sincronizando'] };
     if (!navigator.onLine) return { synced: 0, failed: 0, conflicts: 0, errors: ['Offline'] };
+    // Sin caja resuelta no hay nada que enviar/recibir: un pull con caja_id
+    // vacío genera 400 en el server. Se sincroniza recién al abrir turno
+    // (setCaja), cuando el push/pull son válidos.
+    if (!this.config.cajaId) return { synced: 0, failed: 0, conflicts: 0, errors: [] };
 
     this.syncing = true;
     this.abortController = new AbortController();
@@ -242,7 +261,11 @@ export class SyncManager {
       },
       body: JSON.stringify({
         caja_id: this.config.cajaId,
-        operaciones: [op],
+        operaciones: [{
+          id: op.id,
+          tipo: op.type, // el server espera `tipo`, no `type` (contrato de la API)
+          payload: op.payload,
+        }],
       }),
       signal: this.abortController?.signal,
     });

@@ -21,7 +21,9 @@
     "test:auth": "npx tsx scripts/auth-test/run-auth-test.ts",
     "test:cash": "npx tsx scripts/cash-movement-test/run-cash-movement-test.ts",
     "test:arqueo": "npx tsx scripts/arqueo-test/run-arqueo-test.ts",
-    "test:all": "npm run test:concurrency && npm run test:fefo && npm run test:scanner && npm run test:cart && npm run test:payment && npm run test:auth && npm run test:cash && npm run test:arqueo"
+    "test:offline-sync": "npx tsx scripts/offline-sync-test/run-offline-sync-test.ts",
+    "test:offline-repo": "npx tsx scripts/offline-repo-test/run-offline-repo-test.ts",
+    "test:all": "npm run test:concurrency && npm run test:fefo && npm run test:scanner && npm run test:cart && npm run test:payment && npm run test:auth && npm run test:cash && npm run test:arqueo && npm run test:offline-sync && npm run test:offline-repo"
   },
   "dependencies": {
     "electron-updater": "^6.1.7"

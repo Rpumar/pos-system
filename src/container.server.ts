@@ -33,7 +33,20 @@ import {
   GetShiftHistoryUseCase,
   GetShiftDetailUseCase,
 } from './application/use-cases/ReportUseCases';
-import { IAuditLogRepository } from './application/ports/IAuthRepositories';
+import { IAuditLogRepository, IShiftRepository } from './application/ports/IAuthRepositories';
+import { IUnitOfWork } from './application/ports/IUnitOfWork';
+import { IProductRepository } from './application/ports/IProductRepository';
+import {
+  OfflineDB,
+  createPOSOfflineDB,
+  OutboxManager,
+  SyncManager,
+  NetworkDetector,
+  OfflineShiftRepository,
+  OfflineUnitOfWork,
+  OfflineProductRepository,
+  buildOfflineDeps,
+} from './infrastructure/persistence/offline';
 
 const silentLogger = {
   warn: (msg: string, meta?: object) => console.warn('[WARN]', msg, meta ?? ''),
@@ -88,11 +101,46 @@ export function buildServerContainer(options: ServerContainerOptions): AppContai
   const api = new ApiClient(`${baseUrl}/api`);
   const ctx = new ServerSessionContext(api);
 
-  const productRepo = new ServerProductRepository(api);
+  const serverProductRepo = new ServerProductRepository(api);
+  const serverShiftRepo = new ServerShiftRepository(api, ctx);
+  const serverUnitOfWork = new ServerUnitOfWork(api, ctx);
+
+  let productRepo: IProductRepository = serverProductRepo;
+  let shiftRepo: IShiftRepository = serverShiftRepo;
+  let unitOfWork: IUnitOfWork = serverUnitOfWork;
+
+  // ── Offline-first: adaptadores que enqueuean al outbox cuando NO hay red ──
+  let offlineDB: OfflineDB | null = null;
+  let outboxManager: OutboxManager | null = null;
+  let syncManager: SyncManager | null = null;
+  let networkDetector: NetworkDetector | null = null;
+
+  if (typeof window !== 'undefined') {
+    offlineDB = createPOSOfflineDB();
+    outboxManager = new OutboxManager(offlineDB);
+    networkDetector = new NetworkDetector({
+      checkUrl: `${baseUrl}/api/health`,
+    });
+    networkDetector.startPolling();
+    syncManager = new SyncManager(offlineDB, outboxManager, {
+      apiBaseUrl: `${baseUrl}/api`,
+    });
+
+    const deps = buildOfflineDeps(offlineDB, outboxManager, networkDetector);
+    deps.resolveLive = async (registerId: string) => {
+      if (!deps.isOnline()) return null;
+      const r = await ctx.resolveRegister(registerId);
+      return { cajaId: r.cajaId, sucursalId: r.sucursalId, cajaNombre: r.cajaNombre };
+    };
+    deps.onCajaResolved = (cajaId: string) => syncManager?.setCaja(cajaId);
+
+    shiftRepo = new OfflineShiftRepository(serverShiftRepo, deps);
+    unitOfWork = new OfflineUnitOfWork(serverUnitOfWork, deps);
+    productRepo = new OfflineProductRepository(serverProductRepo, deps);
+  }
+
   const productCache = new InMemoryProductCache(productRepo, CACHE_STALE_MS);
   const batchRepo = new ServerBatchRepository(api);
-  const shiftRepo = new ServerShiftRepository(api, ctx);
-  const unitOfWork = new ServerUnitOfWork(api, ctx);
   const userRepo = new ServerUserRepository();
 
   const eventBus = new PeripheralEventBus();
@@ -100,7 +148,15 @@ export function buildServerContainer(options: ServerContainerOptions): AppContai
   const printer = createMockPrinter();
   const printQueue = new PrintJobQueue(printer, eventBus, silentLogger);
 
-  const authenticate = new ServerAuthenticateUseCase(api, ctx);
+  let syncStarted = false;
+  const authenticate = new ServerAuthenticateUseCase(api, ctx, (token: string) => {
+    if (!syncManager) return;
+    syncManager.setAuth(token);
+    if (!syncStarted) {
+      syncStarted = true;
+      syncManager.start();
+    }
+  });
 
   const addProduct = new AddProductToCartUseCase(productCache);
   const commitSale = new CommitSaleUseCase(unitOfWork);
@@ -154,7 +210,7 @@ export function buildServerContainer(options: ServerContainerOptions): AppContai
     eventBus,
     productCache,
     config: { registerId },
-    offline: { offlineDB: null, outboxManager: null, syncManager: null, networkDetector: null },
+    offline: { offlineDB, outboxManager, syncManager, networkDetector },
     hardware: { printer, terminal, scanner: null },
   } as unknown as AppContainer;
 }
