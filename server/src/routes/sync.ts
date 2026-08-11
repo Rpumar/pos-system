@@ -27,8 +27,7 @@ function validarSucursal(payload: Record<string, unknown>, user: { sucursalId: s
 }
 
 function turnoAbierto(turnoId: string): { id: string; caja_id: string; sucursal_id: string; usuario_id: string; monto_apertura: number } {
-  const turno = db.prepare('SELECT * FROM turnos WHERE id = ? AND estado = \'ABIERTO\'').get(turnoId) as
-    { id: string; caja_id: string; sucursal_id: string; usuario_id: string; monto_apertura: number } | undefined;
+  const turno = db.prepare('SELECT * FROM turnos WHERE id = ? AND estado = \'ABIERTO\'').get(turnoId) as    { id: string; caja_id: string; sucursal_id: string; usuario_id: string; monto_apertura: number } | undefined;
   if (!turno) throw new Error('Turno no encontrado o no está abierto');
   return turno;
 }
@@ -364,6 +363,15 @@ async function crearAuditoriaServer(payload: any): Promise<void> {
   `).run(id, usuario_id, accion, entidad ?? null, entidad_id ?? null, metadatos ?? null, ip ?? null, user_agent ?? null, created_at ?? new Date().toISOString());
 }
 
+// Interpreta `since` (ms como string o ISO). Nunca `new Date(string)` directo:
+// un string numérico tipo "1756..." es Invalid Date y rompería el pull.
+function parseSince(since: unknown): Date {
+  if (since === undefined || since === '') return new Date(0);
+  const n = Number(since);
+  const parsed = Number.isFinite(n) ? new Date(n) : new Date(String(since));
+  return Number.isNaN(parsed.getTime()) ? new Date(0) : parsed;
+}
+
 // GET /api/sync/pull - Enviar cambios al POS
 router.get('/pull', authMiddleware, async (req: Request, res: Response) => {
   try {
@@ -375,7 +383,10 @@ router.get('/pull', authMiddleware, async (req: Request, res: Response) => {
       return;
     }
 
-    const sinceDate = since ? new Date(since as string) : new Date(0);
+    // `since` viaja como ms (número en string) o ISO. Nunca lo parsees con
+    // `new Date(string)` a secas: "1756..." como string es Invalid Date y el
+    // pull explota en el primer reconnect con since > 0.
+    const sinceDate = parseSince(since);
 
     // La caja debe pertenecer a la sucursal del usuario
     const caja = db.prepare('SELECT id, sucursal_id FROM cajas WHERE id = ?').get(caja_id) as { id: string; sucursal_id: string } | undefined;

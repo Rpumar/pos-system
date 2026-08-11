@@ -105,7 +105,10 @@ export class OfflineShiftRepository implements IShiftRepository {
 
     if (this.deps.isOnline()) {
       const shift = await this.online.create(data);
-      if (reg?.cajaId) this.deps.onCajaResolved?.(reg.cajaId);
+      if (reg?.cajaId) {
+        await this.mirrorOpenShift(shift, reg);
+        this.deps.onCajaResolved?.(reg.cajaId);
+      }
       return shift;
     }
 
@@ -153,7 +156,14 @@ export class OfflineShiftRepository implements IShiftRepository {
   }
 
   async findOpenByRegister(registerId: string): Promise<Shift | null> {
-    if (this.deps.isOnline()) return this.online.findOpenByRegister(registerId);
+    if (this.deps.isOnline()) {
+      const shift = await this.online.findOpenByRegister(registerId);
+      if (shift?.isOpen()) {
+        const reg = this.deps.resolveLive ? await this.deps.resolveLive(registerId) : null;
+        if (reg?.cajaId) await this.mirrorOpenShift(shift, reg);
+      }
+      return shift;
+    }
     const reg = await this.deps.register(registerId);
     const all = await this.deps.db.getAll<DTO>('shifts');
     const rec = all.find((r) => isOpen(r) && String(r['caja_nombre'] ?? '') === registerId);
@@ -298,6 +308,26 @@ export class OfflineShiftRepository implements IShiftRepository {
     };
     if (reg.cajaId) this.deps.setShiftRegister(String(rec['id']), reg);
     if (isOpen(rec)) this.deps.markOpen(String(rec['id']));
+  }
+
+  /**
+   * Espeja un turno abierto en OfflineDB para que un corte de red a mitad de
+   * turno (abierto estando online) pueda seguir operando offline.
+   */
+  private async mirrorOpenShift(shift: Shift, reg: RegisterResolutionCache): Promise<void> {
+    await this.deps.db.put('shifts', {
+      id: shift.id,
+      caja_id: reg.cajaId,
+      sucursal_id: reg.sucursalId,
+      caja_nombre: reg.cajaNombre,
+      usuario_id: shift.cashierId,
+      monto_apertura: shift.openingAmount,
+      estado: 'ABIERTO',
+      status: 'OPEN',
+      opened_at: shift.openedAt.toISOString(),
+    } as never);
+    this.deps.setShiftRegister(shift.id, reg);
+    this.deps.markOpen(shift.id);
   }
 }
 

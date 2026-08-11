@@ -78,8 +78,9 @@ const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
   const server = spawn('node', ['dist/index.js'], {
     cwd: SERVER_DIR,
     env: { ...process.env, PORT: String(PORT), POS_SERVER_DB_PATH: dbPath },
-    stdio: 'ignore',
+    stdio: ['ignore', 'ignore', 'pipe'],
   });
+  server.stderr?.on('data', (d) => process.stdout.write('[SVR] ' + d.toString()));
 
   try {
     for (let i = 0; i < 40; i++) {
@@ -108,7 +109,8 @@ const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
       'cash_movements', 'shifts', 'productos', 'stock_sucursal', 'lotes', 'usuarios']) as any;
     const outbox = new OutboxManager(db);
     const deps = buildOfflineDeps(db, outbox, null);
-    (deps as any).isOnline = () => false; // forzar modo offline
+    let offlineMode = true;
+    (deps as any).isOnline = () => !offlineMode;
 
     // Seed del catálogo + caja (lo que deja un pull previo mientras había red)
     await db.put('productos', { ...leche, activo: 1 });
@@ -183,6 +185,30 @@ const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
       movsServer.some((m) => m.tipo === 'DEPOSITO' && m.monto === 200)
       && movsServer.some((m) => m.tipo === 'RETIRO' && m.monto === 100),
       `tipos=${movsServer.map((m) => m.tipo).join(',')}`);
+
+    // ── Fase 2: apertura ONLINE (se espeja) -> corte -> venta/cierre offline -> reconexión ──
+    offlineMode = false;
+    const shift2 = await shiftRepo.create({ cashierId: adminId, registerId: 'CAJA-1', openingAmount: 400 });
+    check('mid-cut: apertura online queda espejada localmente',
+      (await db.get('shifts', shift2.id))?.estado === 'ABIERTO', '');
+
+    offlineMode = true;
+    const cart2 = new Cart();
+    cart2.addItem(new CartItem(leche.id, leche.sku, leche.nombre, leche.precio, 2));
+    const sale2 = await commit.execute(cart2, shift2.id, adminId, 'CASH');
+    check('mid-cut: venta offline tras corte', sale2.total === totalLeche * 2, `total=${sale2.total}`);
+
+    await shiftRepo.close(shift2.id, { expectedCash: 400 + totalLeche * 2, countedCash: 400 + totalLeche * 2, difference: 0 });
+
+    offlineMode = false; // reconexión
+    const res2 = await sync.sync();
+    check('mid-cut: sync ok tras reconexion', res2.failed === 0 && res2.errors.length === 0,
+      `synced=${res2.synced} failed=${res2.failed} err=${JSON.stringify(res2.errors)}`);
+
+    const turno2 = await (await fetch(API + '/turnos/' + shift2.id, { headers: H })).json();
+    check('mid-cut: turno cerrado en server con ledger',
+      turno2.estado === 'CERRADO' && turno2.monto_esperado === 400 + totalLeche * 2,
+      `estado=${turno2.estado} esperado=${turno2.monto_esperado}`);
   } catch (e) {
     console.log('EXCEPCION: ' + (e instanceof Error ? e.stack ?? e.message : String(e)));
     fails++;
