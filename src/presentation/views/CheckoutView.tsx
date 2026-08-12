@@ -19,6 +19,7 @@ interface CheckoutViewProps {
   onVoidSale: (input: { reason: string; supervisorId: string; supervisorPin: string }) => Promise<void>;
   onProducts: () => void;
   onReports: () => void;
+  onSettings: () => void;
   onCashMovement: (type: 'WITHDRAWAL' | 'DEPOSIT', amount: number, reason: string, supervisor?: { supervisorId: string; pin: string }) => Promise<void>;
   // Periféricos
   eventBus?: PeripheralEventBus;
@@ -48,6 +49,7 @@ export function CheckoutView({
   onVoidSale,
   onProducts,
   onReports,
+  onSettings,
   onCashMovement,
   eventBus,
   printer,
@@ -198,6 +200,10 @@ export function CheckoutView({
         playSound('keypress');
         onReports();
       }, [onReports]),
+      onSettings: useCallback(() => {
+        playSound('keypress');
+        onSettings();
+      }, [onSettings]),
       onRetiro: useCallback(() => {
         setCashType('WITHDRAWAL');
         setCashAmount('');
@@ -405,6 +411,7 @@ export function CheckoutView({
           <kbd>F3</kbd> Informes &nbsp;
           <kbd>F4</kbd> Productos &nbsp;
           <kbd>F5</kbd> Cobrar &nbsp;
+          <kbd>F7</kbd> Config &nbsp;
           <kbd>+/−</kbd> Cant. &nbsp;
           <kbd>F8</kbd> Anular &nbsp;
           <kbd>F12</kbd> Cierre
