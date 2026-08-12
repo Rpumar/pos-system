@@ -3,12 +3,13 @@ import { AppContainer } from './container';
 import { CheckoutView } from './presentation/views/CheckoutView';
 import { ProductManagementView } from './presentation/views/ProductManagementView';
 import { ReportsView } from './presentation/views/ReportsView';
+import { PrinterSettingsView } from './presentation/views/PrinterSettingsView';
 import { User } from './domain/entities/User';
 import { Shift } from './domain/entities/Shift';
 import { Cart } from './domain/entities/Cart';
 import { ShiftCloseSummary } from './application/use-cases/ShiftUseCases';
 
-type AppState = 'LOGIN' | 'OPEN_SHIFT' | 'CHECKOUT' | 'PRODUCTS' | 'REPORTS';
+type AppState = 'LOGIN' | 'OPEN_SHIFT' | 'CHECKOUT' | 'PRODUCTS' | 'REPORTS' | 'SETTINGS';
 interface AppProps { container: AppContainer; }
 
 export function App({ container }: AppProps) {
@@ -119,11 +120,24 @@ export function App({ container }: AppProps) {
     }
   }, [currentUser]);
 
+  const handleOpenSettings = useCallback(() => {
+    // Configuración de hardware: solo SUPERVISOR y ADMIN
+    if (currentUser?.role === 'SUPERVISOR' || currentUser?.role === 'ADMIN') {
+      setAppState('SETTINGS');
+    } else {
+      setToast('Acceso denegado: se requiere rol SUPERVISOR o ADMIN');
+    }
+  }, [currentUser]);
+
   const handleBackFromProducts = useCallback(() => {
     setAppState('CHECKOUT');
   }, []);
 
   const handleBackFromReports = useCallback(() => {
+    setAppState('CHECKOUT');
+  }, []);
+
+  const handleBackFromSettings = useCallback(() => {
     setAppState('CHECKOUT');
   }, []);
 
@@ -155,6 +169,13 @@ export function App({ container }: AppProps) {
       />
     );
   }
+  if (appState === 'SETTINGS') {
+    return (
+      <PrinterSettingsView
+        onBack={handleBackFromSettings}
+      />
+    );
+  }
 
   if (closeSummary) {
     return <CloseRegisterSummaryView summary={closeSummary} onFinish={handleFinishShift} />;
@@ -170,6 +191,7 @@ export function App({ container }: AppProps) {
         onVoidSale={handleVoidSale}
         onProducts={handleOpenProducts}
         onReports={handleOpenReports}
+        onSettings={handleOpenSettings}
         onCashMovement={handleCashMovement}
         eventBus={container.eventBus}
         printer={container.hardware.printer}

@@ -14,6 +14,7 @@ export interface CheckoutKeyboardHandlers {
   onProducts: () => void;   // F4 - Gestión de productos
   onRetiro: () => void;     // F9 - Retiro de efectivo
   onDeposito: () => void;   // F10 - Depósito de efectivo
+  onSettings: () => void;   // F7 - Configuración de impresora
 }
 
 /**
@@ -48,6 +49,7 @@ export function useCheckoutKeyboard(
         F3: 'onReports',
         F4: 'onProducts',
         F5: 'onPay',
+        F7: 'onSettings',
         F8: 'onVoidSale',
         F9: 'onRetiro',
         F10: 'onDeposito',
