@@ -172,6 +172,7 @@ export function App({ container }: AppProps) {
         onReports={handleOpenReports}
         onCashMovement={handleCashMovement}
         eventBus={container.eventBus}
+        printer={container.hardware.printer}
         networkDetector={container.offline.networkDetector ?? undefined}
         outboxManager={container.offline.outboxManager ?? undefined}
         syncManager={container.offline.syncManager ?? undefined}
