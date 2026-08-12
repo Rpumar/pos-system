@@ -1,6 +1,6 @@
 {
   "name": "pos-system",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "Sistema POS de alta velocidad para caja de supermercado",
   "author": "POS System",
   "type": "commonjs",
@@ -23,10 +23,12 @@
     "test:arqueo": "npx tsx scripts/arqueo-test/run-arqueo-test.ts",
     "test:offline-sync": "npx tsx scripts/offline-sync-test/run-offline-sync-test.ts",
     "test:offline-repo": "npx tsx scripts/offline-repo-test/run-offline-repo-test.ts",
-    "test:all": "npm run test:concurrency && npm run test:fefo && npm run test:scanner && npm run test:cart && npm run test:payment && npm run test:auth && npm run test:cash && npm run test:arqueo && npm run test:offline-sync && npm run test:offline-repo"
+    "test:printer": "npx tsx scripts/printer-test/run-printer-test.ts",
+    "test:all": "npm run test:concurrency && npm run test:fefo && npm run test:scanner && npm run test:cart && npm run test:payment && npm run test:auth && npm run test:cash && npm run test:arqueo && npm run test:offline-sync && npm run test:offline-repo && npm run test:printer"
   },
   "dependencies": {
-    "electron-updater": "^6.1.7"
+    "electron-updater": "^6.1.7",
+    "serialport": "^12.0.0"
   },
   "devDependencies": {
     "@types/better-sqlite3": "^7.6.11",
@@ -42,7 +44,6 @@
     "icojs": "^1.0.0",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
-    "serialport": "^12.0.0",
     "sharp": "^0.35.3",
     "tsx": "^4.19.1",
     "typescript": "^5.6.2",
@@ -62,6 +63,8 @@
       "dist/**/*",
       "dist-electron/main.js",
       "dist-electron/main.js.map",
+      "dist-electron/printer.js",
+      "dist-electron/printer.js.map",
       "dist-electron/preload.js",
       "dist-electron/preload.js.map",
       "build-resources/icon.png",

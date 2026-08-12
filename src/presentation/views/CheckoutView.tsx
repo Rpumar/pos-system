@@ -8,6 +8,7 @@ import { NumericKeypad } from '../components/NumericKeypad';
 import { SupervisorAuthPanel, SupervisorAuthRequest } from '../components/SupervisorAuthPanel';
 import { playSound, preloadAudio } from '../utils/audio';
 import { PeripheralEventBus } from '../hardware/PeripheralEventBus';
+import { IThermalPrinter } from '../../application/ports/IPeripherals';
 import { NetworkDetector, OutboxManager, SyncManager } from '../../infrastructure/persistence/offline';
 
 interface CheckoutViewProps {
@@ -21,6 +22,7 @@ interface CheckoutViewProps {
   onCashMovement: (type: 'WITHDRAWAL' | 'DEPOSIT', amount: number, reason: string, supervisor?: { supervisorId: string; pin: string }) => Promise<void>;
   // Periféricos
   eventBus?: PeripheralEventBus;
+  printer?: IThermalPrinter;
   // Offline-first
   networkDetector?: NetworkDetector;
   outboxManager?: OutboxManager;
@@ -48,6 +50,7 @@ export function CheckoutView({
   onReports,
   onCashMovement,
   eventBus,
+  printer,
   networkDetector,
   outboxManager,
   syncManager,
@@ -109,6 +112,27 @@ export function CheckoutView({
       unsubScanDisc?.();
     };
   }, [eventBus]);
+
+  // Poll del estado de impresora: refleja conexión/sin papel al montar y en vivo.
+  useEffect(() => {
+    let cancelled = false;
+    const check = async () => {
+      if (!printer) return;
+      try {
+        const status = await printer.getStatus();
+        if (cancelled) return;
+        setPeripheralStatus((s) => ({ ...s, printer: status }));
+      } catch {
+        if (!cancelled) setPeripheralStatus((s) => ({ ...s, printer: 'ERROR' }));
+      }
+    };
+    void check();
+    const interval = setInterval(check, 5000);
+    return () => {
+      cancelled = true;
+      clearInterval(interval);
+    };
+  }, [printer]);
 
   // Prime audio on first interaction
   useEffect(() => {

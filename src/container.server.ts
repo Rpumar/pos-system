@@ -11,6 +11,7 @@ import { InMemoryProductCache } from './infrastructure/persistence/InMemoryProdu
 import { PeripheralEventBus } from './infrastructure/hardware/PeripheralEventBus';
 import { PrintJobQueue } from './infrastructure/hardware/PrintJobQueue';
 import { IPaymentTerminal, IThermalPrinter } from './application/ports/IPeripherals';
+import { IpcPrinter } from './infrastructure/hardware/IpcPrinter';
 import { AddProductToCartUseCase } from './application/use-cases/AddProductToCartUseCase';
 import { CommitSaleUseCase } from './application/use-cases/CommitSaleUseCase';
 import { ReceiveBatchUseCase } from './application/use-cases/ReceiveBatchUseCase';
@@ -52,20 +53,6 @@ const silentLogger = {
   warn: (msg: string, meta?: object) => console.warn('[WARN]', msg, meta ?? ''),
   error: (msg: string, meta?: object) => console.error('[ERROR]', msg, meta ?? ''),
 };
-
-function createMockPrinter(): IThermalPrinter {
-  return {
-    async getStatus() {
-      return 'READY' as const;
-    },
-    async print(c: string) {
-      console.log('[PRINTER]', c);
-    },
-    async openCashDrawer() {
-      console.log('[PRINTER] Cajón abierto');
-    },
-  };
-}
 
 function createMockTerminal(): IPaymentTerminal {
   return {
@@ -145,7 +132,7 @@ export function buildServerContainer(options: ServerContainerOptions): AppContai
 
   const eventBus = new PeripheralEventBus();
   const terminal = createMockTerminal();
-  const printer = createMockPrinter();
+  const printer: IThermalPrinter = new IpcPrinter(eventBus);
   const printQueue = new PrintJobQueue(printer, eventBus, silentLogger);
 
   let syncStarted = false;

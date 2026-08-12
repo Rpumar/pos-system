@@ -1,11 +1,37 @@
 import { app, BrowserWindow, ipcMain, dialog, shell } from 'electron';
-import { join, dirname } from 'path';
+import { join } from 'path';
 import { spawn } from 'child_process';
 import { autoUpdater } from 'electron-updater';
+import {
+  SerialThermalPrinter,
+  PrinterSettingsStore,
+  listSerialPorts,
+  PrinterSettings,
+  EscPosPaperWidth,
+  ESC_POS_PAPER_WIDTHS,
+} from './printer';
 
 let mainWindow: BrowserWindow | null = null;
 let serverProcess: ReturnType<typeof spawn> | null = null;
 let isQuitting = false;
+
+let printer: SerialThermalPrinter | null = null;
+let printerSettingsStore: PrinterSettingsStore | null = null;
+
+function settingsFilePath(): string {
+  return join(app.getPath('userData'), 'printer.json');
+}
+
+function createPrinter(): SerialThermalPrinter {
+  printerSettingsStore = new PrinterSettingsStore(settingsFilePath());
+  const settings = printerSettingsStore.load();
+  printer = new SerialThermalPrinter(settings);
+  return printer;
+}
+
+function getPrinter(): SerialThermalPrinter | null {
+  return printer;
+}
 
 function createWindow(): void {
   mainWindow = new BrowserWindow({
@@ -126,10 +152,67 @@ function setupIpc(): void {
     }
     startServer();
   });
+
+  setupHardwareIpc();
+}
+
+function setupHardwareIpc(): void {
+  ipcMain.handle('hardware:printer:listPorts', async () => {
+    return listSerialPorts();
+  });
+
+  ipcMain.handle('hardware:printer:getConfig', () => {
+    return getPrinter()?.getSettings() ?? null;
+  });
+
+  ipcMain.handle('hardware:printer:setConfig', async (_event, config: Partial<PrinterSettings>) => {
+    if (!printerSettingsStore) printerSettingsStore = new PrinterSettingsStore(settingsFilePath());
+    const current = printerSettingsStore.load();
+    const next: PrinterSettings = {
+      portPath: typeof config.portPath === 'string' && config.portPath ? config.portPath : current.portPath,
+      baudRate: typeof config.baudRate === 'number' && config.baudRate > 0 ? config.baudRate : current.baudRate,
+      paperWidth: config.paperWidth && ESC_POS_PAPER_WIDTHS.includes(config.paperWidth as EscPosPaperWidth)
+        ? (config.paperWidth as EscPosPaperWidth)
+        : current.paperWidth,
+    };
+    await printer?.close();
+    printerSettingsStore.save(next);
+    printer = new SerialThermalPrinter(next);
+    return printer.getSettings();
+  });
+
+  ipcMain.handle('hardware:printer:print', async (_event, content: string) => {
+    const p = getPrinter();
+    if (!p) throw new Error('Impresora no configurada');
+    await p.print(content);
+    return { ok: true };
+  });
+
+  ipcMain.handle('hardware:printer:status', async () => {
+    const p = getPrinter();
+    if (!p) return { status: 'OFFLINE' as const, error: 'Impresora no configurada' };
+    const status = await p.checkStatus();
+    return { status, error: p.getError() };
+  });
+
+  ipcMain.handle('hardware:printer:cashdrawer', async () => {
+    const p = getPrinter();
+    if (!p) throw new Error('Impresora no configurada');
+    await p.openCashDrawer();
+    return { ok: true };
+  });
+
+  ipcMain.handle('hardware:printer:test', async (_event, content: string) => {
+    const p = getPrinter();
+    if (!p) throw new Error('Impresora no configurada');
+    await p.print(content ?? 'PRUEBA DE IMPRESION\n================\nOK');
+    return { ok: true };
+  });
 }
 
 app.whenReady().then(() => {
   startServer();
+  createPrinter();
   setupAutoUpdater();
   setupIpc();
   createWindow();

@@ -28,6 +28,17 @@ contextBridge.exposeInMainWorld('electronAPI', {
       ipcRenderer.on('update:downloaded', (_, info) => callback(info));
     },
   },
+  hardware: {
+    printer: {
+      listPorts: () => ipcRenderer.invoke('hardware:printer:listPorts'),
+      getConfig: () => ipcRenderer.invoke('hardware:printer:getConfig'),
+      setConfig: (config: any) => ipcRenderer.invoke('hardware:printer:setConfig', config),
+      print: (content: string) => ipcRenderer.invoke('hardware:printer:print', content),
+      status: () => ipcRenderer.invoke('hardware:printer:status'),
+      openCashDrawer: () => ipcRenderer.invoke('hardware:printer:cashdrawer'),
+      test: (content?: string) => ipcRenderer.invoke('hardware:printer:test', content),
+    },
+  },
 });
 
 declare global {
@@ -52,6 +63,17 @@ declare global {
         install: () => Promise<void>;
         onAvailable: (callback: (info: any) => void) => void;
         onDownloaded: (callback: (info: any) => void) => void;
+      };
+      hardware: {
+        printer: {
+          listPorts: () => Promise<Array<{ port: string; manufacturer?: string; pnpId?: string }>>;
+          getConfig: () => Promise<{ portPath: string; baudRate: number; paperWidth: '58' | '80' } | null>;
+          setConfig: (config: any) => Promise<{ portPath: string; baudRate: number; paperWidth: '58' | '80' }>;
+          print: (content: string) => Promise<{ ok: true }>;
+          status: () => Promise<{ status: string; error?: string | null }>;
+          openCashDrawer: () => Promise<{ ok: true }>;
+          test: (content?: string) => Promise<{ ok: true }>;
+        };
       };
     };
   }
